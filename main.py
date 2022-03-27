@@ -7,6 +7,8 @@ from replit import db
 from keep_alive import keep_alive
 from discord.utils import get
 
+print("TOP")
+
 def get_keyword(client, message):
   keywords = db["keywords"]
   return keywords[str(message.guild.id)]
@@ -58,7 +60,14 @@ def get_role_from_mention(mention):
   if mention.startswith('<@&') and mention.endswith('>'):
     id = mention[3:-1]
     return int(id)
+#====================== CUSTOM CHECKS ======================#
 
+#Checks if author has the apropriate role to add sentences
+async def has_add_role(ctx):
+  roles = db["add_roles"]
+  print(str(ctx.guild.id) in roles)
+  return str(ctx.guild.id) in roles
+  
 #====================== EVENTS ======================#
     
 #Fires when the bot joins a server
@@ -95,7 +104,7 @@ async def test(ctx):
   
 #Add a question to the database
 @client.command()
-#@commands.has_role( (db["add_roles"])[str(ctx.guild.id)] )
+@commands.check(has_add_role)
 async def addquestion(ctx, choice1, choice2):
 
   add_choice(format_choices(choice1, choice2, str(ctx.author)), str(ctx.guild.id))
@@ -178,7 +187,7 @@ async def delete(ctx, *args):
 async def play(ctx):
   if str(ctx.guild.id) not in db.keys():
     keywords = db["keywords"]
-    await message.channel.send("No questions recorded yet. Use the '" + keywords[str(ctx.guild.id)] + "addquestion' command.")
+    await ctx.send("No questions recorded yet. Use the '" + keywords[str(ctx.guild.id)] + "addquestion' command.")
     return
     
   sentences = db[str(ctx.guild.id)]
@@ -222,5 +231,6 @@ async def deletedatabase(ctx, password):
   await ctx.send("Deleted every key in database with success.")
 
 
-#keep_alive()
-client.run(os.environ['TOKEN'])
+keep_alive()
+print("Launching bot")
+client.run(os.environ["TOKEN"])
