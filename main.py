@@ -269,5 +269,5 @@ async def deletedatabase(ctx, password):
     await ctx.send("Deleted every key in database with success.")
 
 
-#keep_alive()
+keep_alive()
 client.run(os.environ['TOKEN'])
