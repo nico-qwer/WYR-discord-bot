@@ -78,9 +78,19 @@ async def on_ready():
   #  for channel in guild.channels:
   #    if isinstance(channel, discord.TextChannel): # Check if channel is a text channel
   #      await channel.send("I am back online!")
-
-#====================== COMMANDS ======================#
   
+#====================== CUSTOM CHECKS ======================#
+async def has_add_role(ctx):
+  keywords = db["keywords"]
+  if str(ctx.guild.id) in keywords:
+    return True
+  elif str(ctx.author) == os.environ["BOT CREATOR"]:
+    return True
+  else:
+    return False
+  
+#====================== COMMANDS ======================#
+    
 #Changes the keyword to call the bot
 @client.command()
 @commands.has_permissions(administrator = True)
@@ -97,7 +107,7 @@ async def test(ctx):
   
 #Add a question to the database
 @client.command()
-#@commands.has_role( (db["add_roles"])[str(ctx.guild.id)] )
+@commands.check(has_add_role)
 async def addquestion(ctx, choice1, choice2):
 
   add_choice(format_choices(choice1, choice2, str(ctx.author)), str(ctx.guild.id))
