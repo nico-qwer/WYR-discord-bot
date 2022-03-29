@@ -10,6 +10,7 @@ numpy = "^1.22.2"
 discord = "^1.7.3"
 Flask = "^2.0.3"
 replit = "^3.2.4"
+waitress = "^2.1.1"
 
 [tool.poetry.dev-dependencies]
 

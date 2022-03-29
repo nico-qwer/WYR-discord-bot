@@ -8,12 +8,21 @@ from keep_alive import keep_alive
 from discord.utils import get
 
 def get_prefix(client, ctx):
+    print(db["prefixes"])
     prefixes = db["prefixes"]
-    if str(ctx.guild.id) not in prefixes:
-        prefixes[str(ctx.guild.id)] = "$"
+    print(ctx.guild.id in prefixes)
+    if not ctx.guild.id in prefixes:
+        prefixes[ctx.guild.id] = "$"
         db["prefixes"] = prefixes
-    return prefixes[str(ctx.guild.id)]
-  
+        print("changed")
+    print(ctx.guild.id)
+    print(prefixes)
+    return prefixes[ctx.guild.id]
+
+def get_prefix_2(client, ctx):
+    prefixes = db["prefixes"]
+    print(prefixes[ctx.guild.id])
+    return prefixes[ctx.guild.id]
 
 client = commands.Bot(command_prefix = get_prefix)
 client.remove_command("help")
@@ -31,22 +40,35 @@ if "add_roles" not in db.keys():
 if "delays" not in db.keys():
     db["delays"] = {}
 
+if "update_channel" not in db.keys():
+    db["update_channel"] = {}
+
 #====================== UTILITIES ======================#
   
 #Updates the prefix for a server
 def update_prefix(prefix, server):
     prefixes = db["prefixes"]
-    prefixes[str(server)] = prefix
+    prefixes[server] = prefix
     db["prefixes"] = prefixes
-
   
 #Updates the role needed to add questions
 def update_add_role(role, server):
     roles = db["add_roles"]
-    roles[str(server)] = role
+    roles[server] = role
     db["add_roles"] = roles
 
-  
+#Updates the delay between the question and the reveal
+def update_delay(delay, server):
+    delays = db["delays"]
+    delays[server] = delay
+    db["delays"] = delays
+
+#Updates the channel the bot will post updates
+def update_channel(channel, server):
+    channels = db["update_channel"]
+    channels[server] = channel
+    db["update_channel"] = channels
+    
 #Adds a choice in the database
 def add_choice(new_sentence, server):
     if server not in db.keys():
@@ -61,38 +83,48 @@ def format_choices(choice1, choice2, author):
     return choice1 + "-" + choice2 + "-" + author
 
 
-def get_role_from_mention(mention):
-    if mention.startswith('<@&') and mention.endswith('>'):
-        id = mention[3:-1]
-        return int(id)
-
 #====================== EVENTS ======================#
     
 #Fires when the bot joins a server
 @client.event
 async def on_guild_join(guild):
     prefixes = db["prefixes"]
-    prefixes[str(guild.id)] = "$"
-
+    if guild.id not in prefixes:
+        prefixes[guild.id] = "$"
+        #db["prefixes"] = prefixes
   
 #Fires when the bot is logged in
 @client.event
 async def on_ready():
     print("Logged in as {0.user}".format(client))
-    #for guild in client.guilds:
-    #  for channel in guild.channels:
-    #    if isinstance(channel, discord.TextChannel): # Check if channel is a text channel
-    #        await channel.send("I am back online!")
-  
+    for guild in client.guilds:
+        update_channel = 0
+        if guild.id in db["update_channel"]:
+            update_channels = db["update_channel"]
+            update_channel = update_channels[guild.id]
+        
+        for channel in guild.channels:
+            if isinstance(channel, discord.TextChannel) and channel.id == update_channel:
+                await channel.send("I am back online!")
+                break
+            elif isinstance(channel, discord.TextChannel) and channel.name == "general":
+                await channel.send("I am back online!")
+                break
+                    
+                      
 #====================== CUSTOM CHECKS ======================#
-async def has_add_role(ctx):
-    prefixes = db["prefixes"]
-    if str(ctx.guild.id) in prefixes:
-        return True
-    elif str(ctx.author) == os.environ["BOT CREATOR"]:
-        return True
-    else:
-        return False
+def has_add_role(ctx):
+    roles = db["add_roles"]
+    if ctx.guild.id in roles:
+        role_name = str(roles[ctx.guild.id])
+        role = discord.utils.get(ctx.guild.roles, name=role_name)
+        if role in ctx.author.roles:
+            return True
+        #elif str(ctx.author) == os.environ["BOT CREATOR"]:
+        #return True
+        else:
+            return False
+    return True
   
 #====================== COMMANDS ======================#
 
@@ -108,13 +140,14 @@ async def help(ctx):
         if not syntax or syntax is None or syntax == "":
             syntax = "ERROR: no syntax specified."
 
-        embed.add_field(name= db["prefixes"][str(ctx.guild.id)] + command.name, value=syntax, inline=False)
+        keywords = db["prefixes"]
+        embed.add_field(name= keywords[ctx.guild.id] + command.name, value=syntax, inline=False)
     await ctx.send(embed=embed)
     
 #Changes the prefix used to call the bot
 @client.command(description = "Changes the prefix used to call the bot \narguments: <prefix>")
 @commands.has_permissions(administrator = True)
-async def changeprefix(ctx, new_prefix):
+async def setprefix(ctx, new_prefix):
     update_prefix(new_prefix, ctx.guild.id)
     await ctx.send("Updated prefix to " + new_prefix)
 
@@ -127,25 +160,30 @@ async def test(ctx):
   
 #Add a question to the database
 @client.command(description = "Add a question to the database \narguments: <choice1> <choice2>")
-@commands.check(has_add_role)
 async def addquestion(ctx, choice1, choice2):
-
-    add_choice(format_choices(choice1, choice2, str(ctx.author)), str(ctx.guild.id))
-
+    if has_add_role(ctx) == False: 
+        roles = db["add_roles"]
+        await ctx.send("You need the " + str(roles[ctx.guild.id]) + " role to add questions.")
+        return
+    
+    add_choice(format_choices(choice1, choice2, str(ctx.author)), ctx.guild.id)
     await ctx.send("Added choices: "+ choice1 + ", or " + choice2)
 
-  
+    
+#Changes channel the bot will post updates
+@client.command(description = "Changes channel the bot will post updates \narguments: <#channelname>")
+@commands.has_permissions(administrator = True)
+async def setupdatechannel(ctx, channel: discord.TextChannel):
+    channel_id = channel.id
+    update_channel(channel_id, ctx.guild.id)
+    ctx.send("Update messages will now be sent in " + channel.mention)
+
 #Updates role necessary to add questions
 @client.command(description = "Updates role necessary to add questions \narguments: <@role>")
 @commands.has_permissions(administrator = True)
-async def setaddrole(ctx, arg):
-
-    role_id = get_role_from_mention(str(arg))
-
-    role = ctx.guild.get_role(role_id)
-      
+async def setaddrole(ctx, role: discord.Role):
     if role != None:
-        update_add_role(str(role), ctx.guild.id)
+        update_add_role(role, ctx.guild.id)
         await ctx.send("Changed add role to {0}.".format(role.mention))
 
 
@@ -153,21 +191,18 @@ async def setaddrole(ctx, arg):
 @client.command(description = "Updates delay between question and reveal \narguments: <seconds>")
 @commands.has_permissions(administrator = True)
 async def setdelay(ctx, arg):
-    delays = db["delays"]
-    delays[str(ctx.guild.id)] = float(arg)
-    db["delays"] = delays
-
+    update_delay(float(arg), ctx.guild.id)
     await ctx.send("Changed delay to " + arg + " seconds.")
 
       
 #Lists all questions
 @client.command(description = "Lists all questions in database \nNo arguments.")
 async def list(ctx):
-    questions = db[str(ctx.guild.id)]
+    questions = db[ctx.guild.id]
 
     if len(questions) == 0:
         prefixes = db["prefixes"]
-        await ctx.send("No questions recorded yet. Use the '" + prefixes[str(ctx.guild.id)] + "addquestion' command.")
+        await ctx.send("No questions recorded yet. Use the '" + prefixes[ctx.guild.id] + "addquestion' command.")
         return
     
     embed = discord.Embed(title="Listing all recorded questions:", colour=0xAD00AD)
@@ -190,7 +225,7 @@ async def list(ctx):
 @client.command(description = "Deletes one or multiple question(s) \narguments: <number>")
 @commands.has_permissions(administrator = True)
 async def delete(ctx, *args):
-    questions = db[str(ctx.guild.id)]
+    questions = db[ctx.guild.id]
     indexes = []
     for number in args:
         int_num = int(number)
@@ -213,18 +248,18 @@ async def delete(ctx, *args):
         questions.pop(index - 1)
       
     await ctx.send(embed=embed)
-    db[str(ctx.guild.id)] = questions
+    db[ctx.guild.id] = questions
 
     
 #Main game
 @client.command(description = "Play the game! \nNo arguments.")
 async def play(ctx):
-    if str(ctx.guild.id) not in db.keys():
+    if ctx.guild.id not in db.keys():
         prefixes = db["prefixes"]
-        await ctx.send("No questions recorded yet. Use the '" + prefixes[str(ctx.guild.id)] + "addquestion' command.")
+        await ctx.send("No questions recorded yet. Use the '" + prefixes[ctx.guild.id] + "addquestion' command.")
         return
     
-    sentences = db[str(ctx.guild.id)]
+    sentences = db[ctx.guild.id]
     non_formated_chosen = random.choice(sentences)
     
     choice1 = non_formated_chosen.split("-")[0]
@@ -242,10 +277,11 @@ async def play(ctx):
     await current.add_reaction(blue_emoji)
 
     delays = db["delays"]
-    if str(ctx.guild.id) not in delays:
-        delays[str(ctx.guild.id)] = 20
+    if ctx.guild.id not in delays:
+        update_delay(float(20), ctx.guild.id)
+        delays = db["delays"]
     
-    time.sleep(delays[str(ctx.guild.id)])
+    time.sleep(delays[ctx.guild.id])
 
     new_current = await current.channel.fetch_message(current.id)
     
@@ -269,5 +305,5 @@ async def deletedatabase(ctx, password):
     await ctx.send("Deleted every key in database with success.")
 
 
-keep_alive()
+#keep_alive()
 client.run(os.environ['TOKEN'])
